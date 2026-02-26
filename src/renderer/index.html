@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AxHost Plugin</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 登录页面 -->
+    <div id="login-page" class="page">
+      <div class="login-container">
+        <div class="logo">
+          <div class="logo-icon">📦</div>
+          <h1>AxHost Plugin</h1>
+          <p>原型管理插件</p>
+        </div>
+        <form id="login-form" class="login-form">
+          <div class="form-group">
+            <label for="employee-id">工号</label>
+            <input 
+              type="text" 
+              id="employee-id" 
+              placeholder="请输入工号"
+              required
+              autocomplete="off"
+            >
+          </div>
+          <div class="form-group">
+            <label for="password">密码</label>
+            <input 
+              type="password" 
+              id="password" 
+              placeholder="请输入密码"
+              required
+            >
+          </div>
+          <div class="form-group server-url-group">
+            <label for="server-url">服务器地址</label>
+            <input 
+              type="text" 
+              id="server-url" 
+              placeholder="http://localhost:8000"
+              value="http://localhost:8000"
+            >
+          </div>
+          <div id="login-error" class="error-message"></div>
+          <button type="submit" class="btn btn-primary btn-block">
+            <span class="btn-text">登录</span>
+            <span class="btn-loading" style="display: none;">
+              <span class="spinner"></span> 登录中...
+            </span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 主页面 -->
+    <div id="main-page" class="page" style="display: none;">
+      <!-- 头部 -->
+      <header class="app-header">
+        <div class="header-left">
+          <span class="logo-small">📦</span>
+          <span class="app-title">AxHost</span>
+        </div>
+        <div class="header-right">
+          <span id="user-name" class="user-name"></span>
+          <button id="btn-logout" class="btn-icon" title="退出登录">🚪</button>
+          <button id="btn-settings" class="btn-icon" title="设置">⚙️</button>
+        </div>
+      </header>
+
+      <!-- 内容区域 -->
+      <main class="app-content">
+        <!-- 工具栏 -->
+        <div class="toolbar">
+          <button id="btn-new-project" class="btn btn-primary btn-sm">
+            <span>+</span> 新增原型
+          </button>
+          <div class="search-box">
+            <input type="text" id="search-input" placeholder="搜索原型...">
+            <span class="search-icon">🔍</span>
+          </div>
+        </div>
+
+        <!-- 项目列表 -->
+        <div id="project-list" class="project-list">
+          <!-- 项目卡片将通过 JS 动态插入 -->
+        </div>
+
+        <!-- 空状态 -->
+        <div id="empty-state" class="empty-state" style="display: none;">
+          <div class="empty-icon">📂</div>
+          <p>暂无原型项目</p>
+          <button id="btn-empty-new" class="btn btn-primary">创建第一个原型</button>
+        </div>
+
+        <!-- 加载状态 -->
+        <div id="loading-state" class="loading-state">
+          <div class="spinner-large"></div>
+          <p>加载中...</p>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 新建/编辑项目弹窗 -->
+  <div id="project-modal" class="modal" style="display: none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">新增原型</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="project-form">
+          <input type="hidden" id="project-id">
+          <div class="form-group">
+            <label for="project-name">项目名称 *</label>
+            <input type="text" id="project-name" placeholder="输入项目名称" required>
+          </div>
+          <div class="form-group">
+            <label for="project-remark">备注</label>
+            <textarea id="project-remark" rows="2" placeholder="输入备注（可选）"></textarea>
+          </div>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="project-public">
+              <span class="checkmark"></span>
+              公开访问（无需密码）
+            </label>
+          </div>
+          <div class="form-group" id="password-group">
+            <label for="project-password">访问密码</label>
+            <div class="input-with-btn">
+              <input type="text" id="project-password" placeholder="6-18位数字字母">
+              <button type="button" id="btn-gen-password" class="btn btn-secondary btn-sm">随机生成</button>
+            </div>
+          </div>
+          <div class="form-group" id="upload-group">
+            <label>关联本地目录</label>
+            <div class="directory-selector">
+              <input type="text" id="project-directory" readonly placeholder="点击选择 Axure 输出目录">
+              <button type="button" id="btn-select-dir" class="btn btn-secondary">选择</button>
+            </div>
+          </div>
+          <div id="form-error" class="error-message"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-cancel">取消</button>
+        <button type="submit" form="project-form" class="btn btn-primary">
+          <span class="btn-text">保存</span>
+          <span class="btn-loading" style="display: none;">保存中...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 更改关联弹窗 -->
+  <div id="link-modal" class="modal" style="display: none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>更改本地关联</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="current-link" id="current-link-info">
+          <p>当前关联：</p>
+          <code id="current-link-path"></code>
+        </div>
+        <div class="form-group">
+          <label>选择新的本地目录</label>
+          <div class="directory-selector">
+            <input type="text" id="new-link-path" readonly placeholder="点击选择目录">
+            <button type="button" id="btn-select-new-dir" class="btn btn-secondary">选择</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btn-remove-link" class="btn btn-danger">取消关联</button>
+        <button type="button" class="btn btn-secondary modal-cancel">取消</button>
+        <button type="button" id="btn-save-link" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 操作菜单弹窗 -->
+  <div id="action-menu" class="action-menu" style="display: none;">
+    <div class="menu-item" data-action="update">
+      <span class="menu-icon">🔄</span>
+      <span>更新原型</span>
+    </div>
+    <div class="menu-item" data-action="link">
+      <span class="menu-icon">🔗</span>
+      <span>更改关联</span>
+    </div>
+    <div class="menu-item" data-action="edit">
+      <span class="menu-icon">✏️</span>
+      <span>修改信息</span>
+    </div>
+    <div class="menu-divider"></div>
+    <div class="menu-item menu-item-danger" data-action="open-online">
+      <span class="menu-icon">🌐</span>
+      <span>在线查看</span>
+    </div>
+  </div>
+
+  <!-- 提示消息 -->
+  <div id="toast" class="toast" style="display: none;">
+    <span id="toast-icon"></span>
+    <span id="toast-message"></span>
+  </div>
+
+  <script src="js/app.js" type="module"></script>
+</body>
+</html>
