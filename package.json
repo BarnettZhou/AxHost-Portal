@@ -1,7 +1,7 @@
 {
-  "name": "axhost-plugin",
+  "name": "axhost-portal",
   "version": "1.0.0",
-  "description": "AxHost 原型管理插件 - 本地 Axure 原型与线上项目关联工具",
+  "description": "AxHost 原型管理工具 - 本地 Axure 原型与线上项目关联工具",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -32,15 +32,16 @@
     "axios": "^1.6.2"
   },
   "build": {
-    "appId": "com.axhost.plugin",
-    "productName": "AxHost Plugin",
+    "appId": "com.axhost.portal",
+    "productName": "AxHost Portal",
     "directories": {
       "output": "dist"
     },
     "files": [
       "src/**/*",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "icon/**/*"
     ],
     "win": {
       "target": [
@@ -58,7 +59,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "icon/icon.ico"
     },
     "mac": {
       "target": [
@@ -70,7 +71,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.icns",
+      "icon": "icon/icon.icns",
       "category": "public.app-category.developer-tools"
     },
     "linux": {
@@ -88,7 +89,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.png",
+      "icon": "icon/icon.png",
       "category": "Development"
     },
     "nsis": {

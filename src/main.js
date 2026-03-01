@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 const archiver = require('archiver');
 const AdmZip = require('adm-zip');
 const axios = require('axios');
@@ -19,6 +20,25 @@ const STORE_FILE = path.join(app.getPath('userData'), 'project-links.json');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 
 let mainWindow = null;
+let tray = null;
+
+// 单实例锁定
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  console.log('[App] Another instance is running, quitting...');
+  app.quit();
+  process.exit(0);
+} else {
+  app.on('second-instance', () => {
+    // 当运行第二个实例时，聚焦到第一个实例的窗口
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
 
 // 创建设置文件（如果不存在）
 function initSettings() {
@@ -80,6 +100,8 @@ function createWindow() {
     minHeight: CONFIG.minHeight,
     maxWidth: CONFIG.maxWidth,
     maxHeight: CONFIG.maxHeight,
+    title: 'AxHost Portal',
+    icon: path.join(__dirname, '..', 'icon', 'icon.ico'),
     resizable: true,
     maximizable: false,
     fullscreenable: false,
@@ -100,7 +122,16 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // 窗口关闭时清理
+  // 窗口关闭时最小化到托盘（不是退出）
+  mainWindow.on('close', (event) => {
+    if (!app.isQuiting) {
+      event.preventDefault();
+      mainWindow.hide();
+      console.log('[Window] Minimized to tray');
+    }
+  });
+
+  // 窗口真正关闭时清理
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -110,6 +141,82 @@ function createWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  // 移除菜单栏
+  Menu.setApplicationMenu(null);
+
+  // 创建托盘图标
+  createTray();
+}
+
+// 创建托盘图标
+function createTray() {
+  // 尝试多个可能的路径（开发环境 vs 打包环境）
+  const possiblePaths = [
+    path.join(__dirname, '..', 'icon', 'icon.ico'),
+    path.join(__dirname, '..', '..', 'icon', 'icon.ico'),
+    path.join(process.resourcesPath, 'icon', 'icon.ico'),
+    path.join(app.getAppPath(), 'icon', 'icon.ico'),
+  ];
+  
+  let iconPath = null;
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      iconPath = p;
+      console.log('[Tray] Found icon at:', p);
+      break;
+    }
+  }
+  
+  if (!iconPath) {
+    console.error('[Tray] Icon not found in any path, skipping tray creation');
+    return;
+  }
+  
+  try {
+    tray = new Tray(iconPath);
+    tray.setToolTip('AxHost Portal');
+  } catch (err) {
+    console.error('[Tray] Failed to create tray:', err.message);
+    return;
+  }
+  
+  // 右键菜单
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示窗口',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.isQuiting = true;
+        app.quit();
+      }
+    }
+  ]);
+  
+  tray.setContextMenu(contextMenu);
+  
+  // 左键点击显示窗口
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  });
+  
+  console.log('[Tray] Tray created');
 }
 
 // 应用准备就绪
@@ -306,6 +413,36 @@ ipcMain.handle('open-external', (event, url) => {
   return true;
 });
 
+// 网络检测 - 尝试连接指定主机的端口
+ipcMain.handle('check-network', async (event, host, port, timeout = 3000) => {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    
+    // 设置超时
+    socket.setTimeout(timeout);
+    
+    socket.on('connect', () => {
+      console.log(`[Network] Ping ${host}:${port} - Success`);
+      socket.destroy();
+      resolve({ success: true, host, port });
+    });
+    
+    socket.on('timeout', () => {
+      console.log(`[Network] Ping ${host}:${port} - Timeout`);
+      socket.destroy();
+      resolve({ success: false, host, port, error: '连接超时' });
+    });
+    
+    socket.on('error', (err) => {
+      console.log(`[Network] Ping ${host}:${port} - Error: ${err.message}`);
+      socket.destroy();
+      resolve({ success: false, host, port, error: err.message });
+    });
+    
+    socket.connect(port, host);
+  });
+});
+
 // HTTP 请求封装
 ipcMain.handle('http-request', async (event, options) => {
   try {
@@ -314,9 +451,14 @@ ipcMain.handle('http-request', async (event, options) => {
 
     console.log('[HTTP] Request:', options.method || 'GET', options.url);
 
+    // 处理 URL 拼接，避免双斜杠
+    const normalizedBaseURL = baseURL.replace(/\/$/, '');  // 去掉末尾斜杠
+    const normalizedPath = options.url.startsWith('/') ? options.url : '/' + options.url;
+    const fullURL = normalizedBaseURL + normalizedPath;
+
     const config = {
       method: options.method || 'GET',
-      url: `${baseURL}${options.url}`,
+      url: fullURL,
       headers: options.headers || {},
       timeout: options.timeout || 30000,
     };

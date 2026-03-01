@@ -108,7 +108,20 @@ const api = {
         app.showLoginPage();
         throw new Error('登录已过期，请重新登录');
       }
-      throw new Error(result.error || '请求失败');
+      // 根据状态码提供更详细的错误信息
+      if (result.status === 404) {
+        throw new Error(`接口未找到 (404)：请检查后端服务是否正常运行，或联系管理员检查服务器配置`);
+      }
+      if (result.status === 500) {
+        throw new Error(`服务器内部错误 (500)：请稍后重试，或联系管理员`);
+      }
+      if (result.status === 403) {
+        throw new Error(`无权限访问 (403)：请确认您的账号有权限访问该系统`);
+      }
+      if (result.status === 0) {
+        throw new Error(`网络请求失败：无法连接到服务器，请检查网络或服务器地址`);
+      }
+      throw new Error(result.error || `请求失败 (${result.status || '未知'})`);
     }
     
     return result.data;
@@ -329,6 +342,19 @@ const app = {
     });
   },
 
+  // 从 URL 中提取主机和端口
+  parseServerUrl(url) {
+    try {
+      const urlObj = new URL(url);
+      return {
+        host: urlObj.hostname,
+        port: parseInt(urlObj.port) || (urlObj.protocol === 'https:' ? 443 : 80),
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
   // 处理登录
   async handleLogin(e) {
     e.preventDefault();
@@ -346,6 +372,22 @@ const app = {
     utils.setButtonLoading(btn, true);
 
     try {
+      // 网络检测
+      if (serverUrl) {
+        const parsed = this.parseServerUrl(serverUrl);
+        if (parsed) {
+          console.log(`[Login] Checking network connectivity to ${parsed.host}:${parsed.port}`);
+          const networkCheck = await window.electronAPI.network.check(parsed.host, parsed.port, 5000);
+          console.log('[Login] Network check result:', networkCheck);
+          
+          if (!networkCheck.success) {
+            utils.showToast('网络错误：无法连接到服务器，请检查网络或联系网络管理员', 'error');
+            utils.setButtonLoading(btn, false);
+            return;
+          }
+        }
+      }
+
       // 保存服务器地址
       if (serverUrl) {
         state.settings.serverUrl = serverUrl;
@@ -357,7 +399,13 @@ const app = {
       this.showMainPage();
       this.loadProjects();
     } catch (e) {
-      document.getElementById('login-error').textContent = e.message;
+      const errorEl = document.getElementById('login-error');
+      errorEl.textContent = e.message;
+      
+      // 对于后端配置问题，显示额外的提示
+      if (e.message.includes('接口未找到')) {
+        utils.showToast('登录失败：后端服务配置异常', 'error');
+      }
     } finally {
       utils.setButtonLoading(btn, false);
     }
@@ -459,15 +507,15 @@ const app = {
               <button class="btn btn-primary btn-sm btn-update" data-id="${project.object_id}">
                 🔄 更新原型
               </button>
-              <button class="btn btn-secondary btn-sm btn-edit" data-id="${project.object_id}">
-                ✏️ 修改
+              <button class="btn btn-secondary btn-sm btn-open-online" data-id="${project.object_id}">
+                🌐 在线查看
               </button>
             ` : `
               <button class="btn btn-secondary btn-sm btn-link" data-id="${project.object_id}">
                 🔗 关联目录
               </button>
-              <button class="btn btn-secondary btn-sm btn-edit" data-id="${project.object_id}">
-                ✏️ 修改
+              <button class="btn btn-secondary btn-sm btn-open-online" data-id="${project.object_id}">
+                🌐 在线查看
               </button>
             `}
           </div>
@@ -491,8 +539,8 @@ const app = {
       btn.addEventListener('click', () => this.openLinkModal(btn.dataset.id));
     });
 
-    container.querySelectorAll('.btn-edit').forEach(btn => {
-      btn.addEventListener('click', () => this.openEditModal(btn.dataset.id));
+    container.querySelectorAll('.btn-open-online').forEach(btn => {
+      btn.addEventListener('click', () => this.openOnline(btn.dataset.id));
     });
   },
 
@@ -522,12 +570,8 @@ const app = {
       case 'link':
         this.openLinkModal(projectId);
         break;
-      case 'edit':
-        this.openEditModal(projectId);
-        break;
       case 'open-online':
-        const serverUrl = state.settings?.serverUrl || 'http://localhost:8000';
-        window.electronAPI.shell.openExternal(`${serverUrl}/projects/${projectId}/`);
+        this.openOnline(projectId);
         break;
     }
   },
@@ -548,22 +592,10 @@ const app = {
     document.getElementById('project-name').focus();
   },
 
-  // 打开编辑弹窗
-  async openEditModal(projectId) {
-    const project = state.projects.find(p => p.object_id === projectId);
-    if (!project) return;
-
-    document.getElementById('modal-title').textContent = '修改信息';
-    document.getElementById('project-id').value = projectId;
-    document.getElementById('project-name').value = project.name;
-    document.getElementById('project-remark').value = project.remark || '';
-    document.getElementById('project-public').checked = project.is_public;
-    document.getElementById('project-password').value = project.view_password || '';
-    document.getElementById('password-group').style.display = project.is_public ? 'none' : '';
-    document.getElementById('project-directory').value = state.projectLinks[projectId]?.path || '';
-    document.getElementById('form-error').textContent = '';
-
-    utils.show('project-modal');
+  // 在线查看项目
+  openOnline(projectId) {
+    const serverUrl = (state.settings?.serverUrl || 'http://localhost:8000').replace(/\/$/, '');
+    window.electronAPI.shell.openExternal(`${serverUrl}/projects/${projectId}/`);
   },
 
   // 处理项目表单提交
@@ -599,52 +631,38 @@ const app = {
         tag_names: [],
       };
 
-      if (projectId) {
-        // 更新项目
-        await api.updateProject(projectId, projectData);
-        
-        // 保存目录关联
-        if (directory) {
-          await window.electronAPI.projectLinks.save(projectId, directory);
-        } else {
-          await window.electronAPI.projectLinks.remove(projectId);
+      // 创建新项目
+      let result;
+      
+      if (directory) {
+        // 需要打包上传
+        const packResult = await window.electronAPI.file.pack(directory);
+        if (!packResult.success) {
+          throw new Error('打包失败: ' + packResult.error);
         }
-        
-        utils.showToast('项目信息已更新', 'success');
-      } else {
-        // 创建新项目
-        let result;
-        
-        if (directory) {
-          // 需要打包上传
-          const packResult = await window.electronAPI.file.pack(directory);
-          if (!packResult.success) {
-            throw new Error('打包失败: ' + packResult.error);
-          }
 
-          try {
-            result = await api.uploadProject(packResult.path, {
-              name,
-              remark,
-              is_public: isPublic,
-              view_password: isPublic ? null : password,
-              tags: '[]',
-            });
-          } finally {
-            // 清理临时文件
-            await window.electronAPI.file.cleanup(packResult.path);
-          }
-        } else {
-          // 仅创建项目记录
-          result = await api.createProject(projectData);
+        try {
+          result = await api.uploadProject(packResult.path, {
+            name,
+            remark,
+            is_public: isPublic,
+            view_password: isPublic ? null : password,
+            tags: '[]',
+          });
+        } finally {
+          // 清理临时文件
+          await window.electronAPI.file.cleanup(packResult.path);
         }
-        
-        utils.showToast('原型创建成功', 'success');
-        
-        // 如果有目录，保存关联
-        if (directory && result.object_id) {
-          await window.electronAPI.projectLinks.save(result.object_id, directory);
-        }
+      } else {
+        // 仅创建项目记录
+        result = await api.createProject(projectData);
+      }
+      
+      utils.showToast('原型创建成功', 'success');
+      
+      // 如果有目录，保存关联
+      if (directory && result.object_id) {
+        await window.electronAPI.projectLinks.save(result.object_id, directory);
       }
 
       this.closeAllModals();

@@ -33,6 +33,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     request: (options) => ipcRenderer.invoke('http-request', options),
   },
 
+  // 网络检测
+  network: {
+    check: (host, port, timeout) => ipcRenderer.invoke('check-network', host, port, timeout),
+  },
+
   // 外部链接
   shell: {
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
