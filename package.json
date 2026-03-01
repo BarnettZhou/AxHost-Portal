@@ -93,10 +93,13 @@
       "category": "Development"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "installerIcon": "icon/icon.ico",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "shortcutName": "AxHost Portal"
     }
   }
 }
