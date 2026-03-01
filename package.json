@@ -1,6 +1,6 @@
 {
   "name": "axhost-portal",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AxHost 原型管理工具 - 本地 Axure 原型与线上项目关联工具",
   "main": "src/main.js",
   "scripts": {
