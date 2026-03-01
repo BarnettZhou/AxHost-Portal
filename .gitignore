@@ -23,3 +23,6 @@ Thumbs.db
 
 # Electron
 out/
+
+# vibe
+.local-env

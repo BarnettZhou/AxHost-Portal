@@ -288,3 +288,17 @@ await window.electronAPI.http.request({
 
 - AxHost 主项目: ../README.md
 - 后端 API 文档: ../AGENTS.md
+
+## 开发环境
+
+当前所处的开发环境请阅读根目录下的 .local-env 文件
+
+- cli_type: 命令行类型，powershell、macos、linux
+
+## Prompt 约束
+
+**重要**:
+
+- 严格遵守 Prompt 的命令执行任务
+- 在尝试自行优化功能前，必须向用户确认
+- 遇到较为复杂的任务，先输出任务分解，由用户确认后再执行
