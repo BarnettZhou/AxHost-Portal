@@ -219,6 +219,23 @@ body {
   background: var(--gray-100);
 }
 
+/* 回到顶部按钮 */
+.btn-scroll-top {
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.btn-scroll-top.show {
+  display: inline-flex;
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .btn-loading {
   display: inline-flex;
   align-items: center;

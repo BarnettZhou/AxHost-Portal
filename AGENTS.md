@@ -286,8 +286,9 @@ await window.electronAPI.http.request({
 
 ## 相关链接
 
-- AxHost 主项目: ../README.md
-- 后端 API 文档: ../AGENTS.md
+- AxHost 主项目: ./README.md
+- 后端 API 文档: ./AGENTS.md
+- 版本历史: ./CHANGELOG.md
 
 ## 开发环境
 

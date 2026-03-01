@@ -262,6 +262,22 @@ const app = {
       utils.showToast('列表已刷新', 'success');
     });
 
+    // 回到顶部按钮
+    const scrollTopBtn = document.getElementById('btn-scroll-top');
+    const appContent = document.querySelector('.app-content');
+    
+    scrollTopBtn.addEventListener('click', () => {
+      appContent.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    
+    appContent.addEventListener('scroll', () => {
+      if (appContent.scrollTop > 100) {
+        scrollTopBtn.classList.add('show');
+      } else {
+        scrollTopBtn.classList.remove('show');
+      }
+    });
+
     // 新增项目
     document.getElementById('btn-new-project').addEventListener('click', () => {
       this.openProjectModal();
