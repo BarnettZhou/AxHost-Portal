@@ -120,6 +120,10 @@ function createWindow() {
   // 窗口准备好后显示
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    // 开发模式下打开开发者工具
+    if (process.env.NODE_ENV === 'development') {
+      mainWindow.webContents.openDevTools();
+    }
   });
 
   // 窗口关闭时最小化到托盘（不是退出）

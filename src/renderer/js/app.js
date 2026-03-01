@@ -256,6 +256,12 @@ const app = {
     // 退出登录
     document.getElementById('btn-logout').addEventListener('click', this.handleLogout.bind(this));
 
+    // 刷新列表
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      this.loadProjects();
+      utils.showToast('列表已刷新', 'success');
+    });
+
     // 新增项目
     document.getElementById('btn-new-project').addEventListener('click', () => {
       this.openProjectModal();
@@ -582,10 +588,10 @@ const app = {
     document.getElementById('project-id').value = '';
     document.getElementById('project-name').value = '';
     document.getElementById('project-remark').value = '';
-    document.getElementById('project-public').checked = false;
+    document.getElementById('project-public').checked = true;
     document.getElementById('project-password').value = '';
     document.getElementById('project-directory').value = '';
-    document.getElementById('password-group').style.display = '';
+    document.getElementById('password-group').style.display = 'none';
     document.getElementById('form-error').textContent = '';
     
     utils.show('project-modal');
@@ -598,11 +604,10 @@ const app = {
     window.electronAPI.shell.openExternal(`${serverUrl}/projects/${projectId}/`);
   },
 
-  // 处理项目表单提交
+  // 处理项目表单提交（仅新增）
   async handleProjectSubmit(e) {
     e.preventDefault();
     
-    const projectId = document.getElementById('project-id').value;
     const name = document.getElementById('project-name').value.trim();
     const remark = document.getElementById('project-remark').value.trim();
     const isPublic = document.getElementById('project-public').checked;
@@ -614,61 +619,77 @@ const app = {
       return;
     }
 
-    if (!isPublic && password && !/^[a-zA-Z0-9]{6,18}$/.test(password)) {
+    // 非公开访问时，密码必填
+    if (!isPublic && !password) {
+      document.getElementById('form-error').textContent = '非公开访问需要设置密码';
+      return;
+    }
+
+    if (!isPublic && !/^[a-zA-Z0-9]{6,18}$/.test(password)) {
       document.getElementById('form-error').textContent = '密码需为6-18位数字字母';
       return;
     }
 
-    const btn = e.target.querySelector('button[type="submit"]');
+    const btn = document.querySelector('#project-modal button[type="submit"]');
     utils.setButtonLoading(btn, true);
+    document.getElementById('form-error').textContent = '';
 
     try {
-      const projectData = {
-        name,
-        remark,
-        is_public: isPublic,
-        view_password: isPublic ? null : password,
-        tag_names: [],
-      };
-
-      // 创建新项目
       let result;
       
       if (directory) {
-        // 需要打包上传
+        // 1. 先打包目录
+        console.log('[Create] Packing directory:', directory);
         const packResult = await window.electronAPI.file.pack(directory);
         if (!packResult.success) {
           throw new Error('打包失败: ' + packResult.error);
         }
+        console.log('[Create] Pack success:', packResult);
 
+        // 2. 拼接表单并上传
         try {
+          console.log('[Create] Uploading project...');
           result = await api.uploadProject(packResult.path, {
             name,
             remark,
-            is_public: isPublic,
-            view_password: isPublic ? null : password,
+            is_public: String(isPublic),
+            view_password: isPublic ? '' : password,
             tags: '[]',
           });
+          console.log('[Create] Upload success:', result);
         } finally {
-          // 清理临时文件
+          // 3. 清理临时文件
           await window.electronAPI.file.cleanup(packResult.path);
         }
+        
+        // 4. 保存目录关联
+        if (result?.object_id) {
+          await window.electronAPI.projectLinks.save(result.object_id, directory);
+          console.log('[Create] Project link saved');
+        }
       } else {
-        // 仅创建项目记录
-        result = await api.createProject(projectData);
+        // 无目录，仅创建项目记录
+        console.log('[Create] Creating project without file...');
+        result = await api.createProject({
+          name,
+          remark,
+          is_public: isPublic,
+          view_password: isPublic ? null : password,
+          tag_names: [],
+        });
+        console.log('[Create] Create success:', result);
       }
       
+      // 5. 成功：关闭modal，显示toast，刷新列表
       utils.showToast('原型创建成功', 'success');
-      
-      // 如果有目录，保存关联
-      if (directory && result.object_id) {
-        await window.electronAPI.projectLinks.save(result.object_id, directory);
-      }
-
       this.closeAllModals();
       this.loadProjects();
+      
     } catch (e) {
-      document.getElementById('form-error').textContent = e.message;
+      // 6. 失败：保持modal，显示错误
+      console.error('[Create] Error:', e);
+      document.getElementById('form-error').textContent = e.message || '创建失败，请重试';
+      utils.showToast('创建失败: ' + (e.message || '请重试'), 'error');
     } finally {
       utils.setButtonLoading(btn, false);
     }

@@ -66,8 +66,8 @@
         </div>
         <div class="header-right">
           <span id="user-name" class="user-name"></span>
+          <button id="btn-refresh" class="btn-icon" title="刷新列表">🔄</button>
           <button id="btn-logout" class="btn-icon" title="退出登录">🚪</button>
-          <button id="btn-settings" class="btn-icon" title="设置">⚙️</button>
         </div>
       </header>
 
@@ -126,12 +126,12 @@
           </div>
           <div class="form-group checkbox-group">
             <label class="checkbox-label">
-              <input type="checkbox" id="project-public">
+              <input type="checkbox" id="project-public" checked>
               <span class="checkmark"></span>
               公开访问（无需密码）
             </label>
           </div>
-          <div class="form-group" id="password-group">
+          <div class="form-group" id="password-group" style="display: none;">
             <label for="project-password">访问密码</label>
             <div class="input-with-btn">
               <input type="text" id="project-password" placeholder="6-18位数字字母">
