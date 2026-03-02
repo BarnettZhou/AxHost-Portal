@@ -91,6 +91,27 @@ function removeProjectLink(projectId) {
   fs.writeFileSync(STORE_FILE, JSON.stringify(links, null, 2));
 }
 
+// 根据平台获取图标路径
+// type: 'dock' | 'window' | 'tray'
+function getIconPath(type = 'window') {
+  const iconDir = path.join(__dirname, '..', 'icon');
+  
+  if (process.platform === 'darwin') {
+    // macOS 统一使用 icon-mac.png
+    return path.join(iconDir, 'icon-mac.png');
+  } else if (process.platform === 'win32') {
+    // Windows 统一使用 .ico
+    return path.join(iconDir, 'icon.ico');
+  } else {
+    // Linux 使用 .png（如果没有 png，回退到 ico）
+    const pngPath = path.join(iconDir, 'icon.png');
+    if (fs.existsSync(pngPath)) {
+      return pngPath;
+    }
+    return path.join(iconDir, 'icon.ico');
+  }
+}
+
 // 创建主窗口
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -101,7 +122,7 @@ function createWindow() {
     maxWidth: CONFIG.maxWidth,
     maxHeight: CONFIG.maxHeight,
     title: 'AxHost Portal',
-    icon: path.join(__dirname, '..', 'icon', 'icon.ico'),
+    icon: getIconPath('window'),
     resizable: true,
     maximizable: false,
     fullscreenable: false,
@@ -126,9 +147,9 @@ function createWindow() {
     }
   });
 
-  // 窗口关闭时最小化到托盘（不是退出）
+  // 窗口关闭时最小化到托盘（不是退出）- Windows 专属行为
   mainWindow.on('close', (event) => {
-    if (!app.isQuiting) {
+    if (!app.isQuiting && process.platform === 'win32') {
       event.preventDefault();
       mainWindow.hide();
       console.log('[Window] Minimized to tray');
@@ -155,12 +176,18 @@ function createWindow() {
 
 // 创建托盘图标
 function createTray() {
+  // 根据平台选择托盘图标
+  const trayIconPath = getIconPath('tray');
+  
   // 尝试多个可能的路径（开发环境 vs 打包环境）
   const possiblePaths = [
+    trayIconPath,
+    path.join(__dirname, '..', '..', 'icon', path.basename(trayIconPath)),
+    path.join(process.resourcesPath, 'icon', path.basename(trayIconPath)),
+    path.join(app.getAppPath(), 'icon', path.basename(trayIconPath)),
+    // 回退到 ico
     path.join(__dirname, '..', 'icon', 'icon.ico'),
-    path.join(__dirname, '..', '..', 'icon', 'icon.ico'),
     path.join(process.resourcesPath, 'icon', 'icon.ico'),
-    path.join(app.getAppPath(), 'icon', 'icon.ico'),
   ];
   
   let iconPath = null;
@@ -231,8 +258,14 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+    } else {
+      mainWindow.show();
     }
   });
+
+  // macOS: 液态玻璃效果需要系统根据应用图标自动生成
+  // 不调用 app.dock.setIcon()，让系统使用应用 bundle 中的图标
+  // 开发模式下会显示 Electron 默认图标，打包后会显示正确的图标
 });
 
 // 所有窗口关闭时退出应用
@@ -240,6 +273,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// 处理应用退出前事件 - 确保可以正常退出
+app.on('before-quit', () => {
+  app.isQuiting = true;
 });
 
 // ==================== IPC 处理器 ====================
