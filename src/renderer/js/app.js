@@ -1,3 +1,22 @@
+// ==================== 标签颜色配置 ====================
+const TAG_COLORS = [
+  { base: '#ffffff', highlight: '#80858f' },
+  { base: '#d5e4fe', highlight: '#2a71f1' },
+  { base: '#d6f1ff', highlight: '#08a1f2' },
+  { base: '#d3f3e2', highlight: '#45af77' },
+  { base: '#fedbdb', highlight: '#de3c36' },
+  { base: '#ffecdb', highlight: '#f88825' },
+  { base: '#fff5cc', highlight: '#f5c400' },
+  { base: '#fbdbff', highlight: '#9a38d7' },
+  { base: '#ffdbea', highlight: '#dd4097' },
+];
+
+// 根据基础颜色获取高亮颜色
+function colorHighlight(baseColor) {
+  const found = TAG_COLORS.find(item => item.base.toUpperCase() === (baseColor || '').toUpperCase());
+  return found ? found.highlight : '#444952';
+}
+
 // ==================== 状态管理 ====================
 const state = {
   user: null,
@@ -7,6 +26,14 @@ const state = {
   settings: null,
   currentProjectId: null,
   isLoading: false,
+  // 分页相关状态
+  pagination: {
+    page: 1,
+    perPage: 12,
+    hasMore: true,
+    isLoadingMore: false,
+    currentSearch: '',
+  },
 };
 
 // ==================== 工具函数 ====================
@@ -157,15 +184,20 @@ const api = {
   },
 
   // 获取项目列表
-  async getProjects(search = '') {
+  async getProjects(search = '', page = 1, perPage = 12) {
     const params = new URLSearchParams();
-    params.append('page', '1');
-    params.append('per_page', '100');
+    params.append('page', String(page));
+    params.append('per_page', String(perPage));
     params.append('project_type', 'my');
     if (search) params.append('search', search);
     
     const data = await this.request(`/api/projects?${params.toString()}`);
-    return data.items || [];
+    return {
+      items: data.items || [],
+      total: data.total || 0,
+      page: data.page || page,
+      perPage: data.per_page || perPage,
+    };
   },
 
   // 创建项目
@@ -262,21 +294,14 @@ const app = {
       utils.showToast('列表已刷新', 'success');
     });
 
-    // 回到顶部按钮
-    const scrollTopBtn = document.getElementById('btn-scroll-top');
-    const appContent = document.querySelector('.app-content');
-    
-    scrollTopBtn.addEventListener('click', () => {
-      appContent.scrollTo({ top: 0, behavior: 'smooth' });
+    // 点击标题打开网页端
+    document.getElementById('app-title').addEventListener('click', () => {
+      const serverUrl = (state.settings?.serverUrl || 'http://localhost:8000').replace(/\/$/, '');
+      window.electronAPI.shell.openExternal(serverUrl);
     });
-    
-    appContent.addEventListener('scroll', () => {
-      if (appContent.scrollTop > 100) {
-        scrollTopBtn.classList.add('show');
-      } else {
-        scrollTopBtn.classList.remove('show');
-      }
-    });
+
+    // 回到顶部按钮和滚动监听
+    this.setupScrollListener();
 
     // 新增项目
     document.getElementById('btn-new-project').addEventListener('click', () => {
@@ -466,25 +491,100 @@ const app = {
   },
 
   // 加载项目列表
-  async loadProjects(search = '') {
-    utils.show('loading-state');
-    utils.hide('project-list');
-    utils.hide('empty-state');
+  async loadProjects(search = '', isLoadMore = false) {
+    // 如果是新的搜索，重置分页状态
+    if (!isLoadMore) {
+      state.pagination.page = 1;
+      state.pagination.currentSearch = search;
+      state.pagination.hasMore = true;
+      state.projects = [];
+      utils.show('loading-state');
+      utils.hide('project-list');
+      utils.hide('empty-state');
+      utils.hide('load-more-indicator');
+    } else {
+      // 加载更多时显示加载指示器
+      state.pagination.isLoadingMore = true;
+      utils.show('load-more-indicator');
+    }
 
     try {
-      state.projects = await api.getProjects(search);
+      const result = await api.getProjects(
+        state.pagination.currentSearch,
+        state.pagination.page,
+        state.pagination.perPage
+      );
+      
       // 重新加载本地关联
       state.projectLinks = await window.electronAPI.projectLinks.getAll();
-      this.renderProjects();
+      
+      // 追加或替换数据
+      if (isLoadMore) {
+        state.projects = state.projects.concat(result.items);
+      } else {
+        state.projects = result.items;
+      }
+      
+      // 判断是否还有更多数据
+      const loadedCount = state.projects.length;
+      state.pagination.hasMore = loadedCount < result.total;
+      
+      this.renderProjects(isLoadMore);
     } catch (e) {
       utils.showToast(e.message, 'error');
     } finally {
+      state.pagination.isLoadingMore = false;
       utils.hide('loading-state');
+      utils.hide('load-more-indicator');
     }
   },
 
+  // 加载更多项目
+  async loadMoreProjects() {
+    if (state.pagination.isLoadingMore || !state.pagination.hasMore) {
+      return;
+    }
+    
+    state.pagination.page += 1;
+    await this.loadProjects(state.pagination.currentSearch, true);
+  },
+
+  // 设置滚动监听
+  setupScrollListener() {
+    const appContent = document.querySelector('.app-content');
+    const scrollTopBtn = document.getElementById('btn-scroll-top');
+    if (!appContent) return;
+    
+    // 回到顶部按钮点击事件
+    if (scrollTopBtn) {
+      scrollTopBtn.addEventListener('click', () => {
+        appContent.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+    
+    appContent.addEventListener('scroll', () => {
+      const scrollTop = appContent.scrollTop;
+      const scrollHeight = appContent.scrollHeight;
+      const clientHeight = appContent.clientHeight;
+      
+      // 回到顶部按钮显示/隐藏
+      if (scrollTopBtn) {
+        if (scrollTop > 100) {
+          scrollTopBtn.classList.add('show');
+        } else {
+          scrollTopBtn.classList.remove('show');
+        }
+      }
+      
+      // 检查是否滚动到底部（当距离底部 100px 时触发加载）
+      if (scrollTop + clientHeight >= scrollHeight - 100) {
+        this.loadMoreProjects();
+      }
+    });
+  },
+
   // 渲染项目列表
-  renderProjects() {
+  renderProjects(isAppend = false) {
     const container = document.getElementById('project-list');
     
     if (state.projects.length === 0) {
@@ -496,16 +596,23 @@ const app = {
     utils.show(container);
     utils.hide('empty-state');
 
-    container.innerHTML = state.projects.map(project => {
+    // 如果是追加模式，只渲染新增的项目
+    const projectsToRender = isAppend 
+      ? state.projects.slice((state.pagination.page - 1) * state.pagination.perPage)
+      : state.projects;
+
+    const html = projectsToRender.map(project => {
       const link = state.projectLinks[project.object_id];
       const linkTag = link ? 
         `<span class="project-tag linked">📁 已关联</span>` : '';
       
-      const tagsHtml = (project.tags || []).map(tag => 
-        `<span class="project-tag" style="background: ${tag.color}20; color: ${tag.color};">
+      const tagsHtml = (project.tags || []).map(tag => {
+        const bgColor = tag.color || '#D3D3D3';
+        const textColor = colorHighlight(bgColor);
+        return `<span class="project-tag" style="background: ${bgColor}; color: ${textColor}; border: 1px solid rgba(0,0,0,0.05);">
           ${tag.emoji || ''} ${tag.name}
-        </span>`
-      ).join('');
+        </span>`;
+      }).join('');
 
       const updateTime = utils.formatTime(project.updated_at);
 
@@ -545,24 +652,41 @@ const app = {
       `;
     }).join('');
 
-    // 绑定卡片事件
-    container.querySelectorAll('.btn-menu').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.showActionMenu(e, btn.dataset.id);
-      });
-    });
+    // 如果是追加模式，追加 HTML；否则替换
+    if (isAppend) {
+      container.insertAdjacentHTML('beforeend', html);
+    } else {
+      container.innerHTML = html;
+    }
 
-    container.querySelectorAll('.btn-update').forEach(btn => {
-      btn.addEventListener('click', () => this.handleUpdateProject(btn.dataset.id));
-    });
-
-    container.querySelectorAll('.btn-link').forEach(btn => {
-      btn.addEventListener('click', () => this.openLinkModal(btn.dataset.id));
-    });
-
-    container.querySelectorAll('.btn-open-online').forEach(btn => {
-      btn.addEventListener('click', () => this.openOnline(btn.dataset.id));
+    // 绑定卡片事件（只绑定新添加的卡片）
+    const cardsToBind = isAppend 
+      ? container.querySelectorAll('.project-card:nth-last-child(-n+' + projectsToRender.length + ')')
+      : container.querySelectorAll('.project-card');
+    
+    cardsToBind.forEach(card => {
+      const btn = card.querySelector('.btn-menu');
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.showActionMenu(e, btn.dataset.id);
+        });
+      }
+      
+      const updateBtn = card.querySelector('.btn-update');
+      if (updateBtn) {
+        updateBtn.addEventListener('click', () => this.handleUpdateProject(updateBtn.dataset.id));
+      }
+      
+      const linkBtn = card.querySelector('.btn-link');
+      if (linkBtn) {
+        linkBtn.addEventListener('click', () => this.openLinkModal(linkBtn.dataset.id));
+      }
+      
+      const openBtn = card.querySelector('.btn-open-online');
+      if (openBtn) {
+        openBtn.addEventListener('click', () => this.openOnline(openBtn.dataset.id));
+      }
     });
   },
 

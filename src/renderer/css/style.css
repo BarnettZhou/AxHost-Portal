@@ -290,6 +290,12 @@ body {
   font-size: 16px;
   font-weight: 600;
   color: var(--gray-900);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.app-title:hover {
+  color: var(--primary);
 }
 
 .header-right {
@@ -457,6 +463,24 @@ body {
   margin-top: 16px;
   font-size: 14px;
   color: var(--gray-500);
+}
+
+/* ==================== 加载更多指示器 ==================== */
+.load-more-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+.load-more-indicator .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--gray-200);
+  border-top-color: var(--primary);
 }
 
 /* ==================== 弹窗 ==================== */

@@ -62,7 +62,7 @@
       <header class="app-header">
         <div class="header-left">
           <span class="logo-small">📦</span>
-          <span class="app-title">AxHost</span>
+          <span class="app-title" id="app-title" title="打开网页端">AxHost</span>
           <button id="btn-scroll-top" class="btn-icon btn-scroll-top" title="回到顶部">⬆️</button>
         </div>
         <div class="header-right">
@@ -101,6 +101,12 @@
         <div id="loading-state" class="loading-state">
           <div class="spinner-large"></div>
           <p>加载中...</p>
+        </div>
+
+        <!-- 加载更多指示器 -->
+        <div id="load-more-indicator" class="load-more-indicator" style="display: none;">
+          <div class="spinner"></div>
+          <span>加载更多...</span>
         </div>
       </main>
     </div>

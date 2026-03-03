@@ -296,10 +296,11 @@ await window.electronAPI.http.request({
 
 - cli_type: 命令行类型，powershell、macos、linux
 
-## Prompt 约束
+## AGENT约束
 
 **重要**:
 
 - 严格遵守 Prompt 的命令执行任务
 - 在尝试自行优化功能前，必须向用户确认
 - 遇到较为复杂的任务，先输出任务分解，由用户确认后再执行
+- 绝对禁止自行commit代码、自行推送代码到任何远程仓库的行为，除非用户明确要求AGENT执行
